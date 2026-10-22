@@ -38,6 +38,7 @@ sub init()
     if last <> invalid then playItem(last)
 
     m.askedQuality = false
+    m.pendingContentId = invalid
     loadPlaylist()
 end sub
 
@@ -121,7 +122,13 @@ sub onRowsLoaded()
     showLists(m.allContent, 0, 0)
     m.loading.dismiss = true
     m.categoryList.setFocus(true)
-    askQualityOnce()
+    if m.pendingContentId <> invalid
+        ' A deep link skips the quality prompt and goes straight to the channel.
+        m.askedQuality = true
+        playPendingDeepLink()
+    else
+        askQualityOnce()
+    end if
 end sub
 
 ' Shows a rows tree (root > category rows > channels) in the two-column panel.
@@ -285,6 +292,45 @@ sub showStatus(text as String)
     m.status.text = text
     m.status.visible = true
     showPanel()
+end sub
+
+' ---------- Deep links ----------
+
+sub onLaunchArgs()
+    args = m.top.launchArgs
+    if args = invalid or args.contentId = invalid then return
+    m.pendingContentId = args.contentId
+    if m.channels.Count() > 0 then playPendingDeepLink()
+end sub
+
+' Plays the channel named by the deep link (exact name, then partial name, then stream URL) in full screen.
+sub playPendingDeepLink()
+    if m.pendingContentId = invalid then return
+    q = LCase(m.pendingContentId.Trim())
+    m.pendingContentId = invalid
+    if q = "" then return
+
+    found = invalid
+    for each ch in m.channels
+        if LCase(ch.name) = q or ch.url = m.pendingContentId
+            found = ch
+            exit for
+        end if
+    end for
+    if found = invalid
+        for each ch in m.channels
+            if Instr(1, LCase(ch.name), q) > 0
+                found = ch
+                exit for
+            end if
+        end for
+    end if
+    if found = invalid then return
+
+    item = CreateObject("roSGNode", "ContentNode")
+    SetChannelFields(item, found)
+    playItem(item)
+    hidePanel()
 end sub
 
 ' ---------- Panel ----------
