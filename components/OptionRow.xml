@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One row in the options menu. shortDescriptionLine1 = "toggle" shows the value with arrows. -->
+<component name="OptionRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged"/>
+        <field id="focusPercent" type="float" onChange="updateFocus"/>
+        <field id="listHasFocus" type="boolean" onChange="updateFocus"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/OptionRow.brs"/>
+    <children>
+        <Rectangle id="highlight" width="640" height="68" color="0x2E3140FF" opacity="0"/>
+        <Rectangle id="accent" width="5" height="68" color="0xF5C518FF" opacity="0"/>
+        <Label id="title" translation="[28,0]" width="360" height="68" vertAlign="center" wrap="false" color="0xC8CAD4FF" font="font:SmallSystemFont"/>
+        <Label id="value" translation="[380,0]" width="236" height="68" vertAlign="center" horizAlign="right" wrap="false" color="0xF5C518FF" font="font:SmallSystemFont"/>
+    </children>
+</component>

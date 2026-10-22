@@ -92,7 +92,8 @@ end sub
 function makeFavoriteRow(name as String, channels as Object) as Object
     row = CreateObject("roSGNode", "ContentNode")
     row.id = "fav:" + name
-    row.title = "Favorites - " + name + "  (" + StrI(channels.Count()).Trim() + ")"
+    if name = "All" then label = "Favorites" else label = "Fav " + name
+    row.title = label + "  (" + StrI(channels.Count()).Trim() + ")"
     for each ch in channels
         SetChannelFields(row.CreateChild("ContentNode"), ch)
     end for

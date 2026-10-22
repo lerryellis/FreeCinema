@@ -1,12 +1,12 @@
-' Default M3U playlist loaded on first launch.
-' Can be overridden on the device: press * > "Set playlist URL".
-function DefaultPlaylistUrl() as String
-    return "https://iptv-org.github.io/iptv/index.m3u"
-end function
-
-' Two-letter country code (from tvg-id, e.g. "NBCNews.us") to keep; "" shows every country.
-function DefaultCountry() as String
-    return "us"
+' Playlists offered in the source picker at launch. The first one is the default.
+' country: two-letter code matched against tvg-id (e.g. "NBCNews.us") to filter; "" keeps all.
+function PlaylistSources() as Object
+    return [
+        { name: "Ellis TV Main",        url: "https://iptv-org.github.io/iptv/index.m3u",               country: "us" }
+        { name: "Global Sports",        url: "https://iptv-org.github.io/iptv/categories/sports.m3u",   country: "" }
+        { name: "UK Channels",          url: "https://iptv-org.github.io/iptv/countries/gb.m3u",        country: "" }
+        { name: "US Channels",          url: "https://iptv-org.github.io/iptv/countries/us.m3u",        country: "" }
+    ]
 end function
 
 ' Personal website with your own videos (M3U, JSON list, or folder listing). "" = none.

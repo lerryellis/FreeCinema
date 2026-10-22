@@ -3,6 +3,8 @@
     <interface>
         <!-- Deep link from main.brs: { contentId: "<channel name or stream url>" } -->
         <field id="launchArgs" type="assocarray" onChange="onLaunchArgs"/>
+        <!-- Set to true to close the app (Back on the first launch menu). -->
+        <field id="exitApp" type="boolean"/>
     </interface>
     <script type="text/brightscript" uri="pkg:/components/Config.brs"/>
     <script type="text/brightscript" uri="pkg:/components/Favorites.brs"/>
@@ -72,6 +74,8 @@
                 color="0xFFFFFFFF"
                 font="font:MediumSystemFont"/>
         </Group>
+
+        <OptionsMenu id="optionsMenu" visible="false"/>
 
         <LoadingScreen id="loading"/>
 

@@ -8,6 +8,10 @@ sub init()
     m.nowPlayingGroup = m.top.findNode("nowPlayingGroup")
     m.nowPlaying = m.top.findNode("nowPlaying")
     m.loading = m.top.findNode("loading")
+    m.optionsMenu = m.top.findNode("optionsMenu")
+    m.optionsMenu.observeField("cycle", "onMenuCycle")
+    m.optionsMenu.observeField("selected", "onMenuSelected")
+    m.optionsMenu.observeField("closed", "onMenuClosed")
     m.panelAnim = m.top.findNode("panelAnim")
     m.panelSlide = m.top.findNode("panelSlide")
     m.panelFade = m.top.findNode("panelFade")
@@ -22,6 +26,7 @@ sub init()
     m.channelList.observeField("itemSelected", "onChannelSelected")
     m.channelList.observeField("itemFocused", "updateHint")
     m.video.observeField("state", "onVideoState")
+    applySubtitles()
 
     m.channels = []
     m.allContent = invalid
@@ -38,8 +43,11 @@ sub init()
     if last <> invalid then playItem(last)
 
     m.askedQuality = false
+    m.launchFlow = true
     m.pendingContentId = invalid
-    loadPlaylist()
+    m.sourceDialog = invalid
+    m.loading.message = "Choose a source"
+    showSourcePicker()
 end sub
 
 ' The quality picker waits until the loading screen has faded, so the brand animation is visible.
@@ -51,28 +59,114 @@ end sub
 
 ' ---------- Playlist loading ----------
 
+' ---------- Sources ----------
+
+' Index into PlaylistSources(), or -1 for a custom URL typed on the device.
+function getSourceIndex() as Integer
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("source")
+        index = sec.Read("source").ToInt()
+        if index = -1 or (index >= 0 and index < PlaylistSources().Count()) then return index
+    else if sec.Exists("playlistUrl")
+        return -1
+    end if
+    return 0
+end function
+
+sub saveSourceIndex(index as Integer)
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    sec.Write("source", StrI(index).Trim())
+    sec.Flush()
+end sub
+
+function getSourceName() as String
+    index = getSourceIndex()
+    if index = -1 then return "Custom playlist"
+    return PlaylistSources()[index].name
+end function
+
 function getPlaylistUrl() as String
+    index = getSourceIndex()
+    if index >= 0 then return PlaylistSources()[index].url
     sec = CreateObject("roRegistrySection", "FreeCinema")
     if sec.Exists("playlistUrl") then return sec.Read("playlistUrl")
-    return DefaultPlaylistUrl()
+    return ""
 end function
 
 sub savePlaylistUrl(url as String)
     sec = CreateObject("roRegistrySection", "FreeCinema")
     sec.Write("playlistUrl", url)
     sec.Flush()
+    saveSourceIndex(-1)
 end sub
 
+' The country filter is remembered per source; it defaults to the source's own setting.
 function getCountry() as String
+    index = getSourceIndex()
     sec = CreateObject("roRegistrySection", "FreeCinema")
-    if sec.Exists("country") then return sec.Read("country")
-    return DefaultCountry()
+    key = "country_" + StrI(index).Trim()
+    if sec.Exists(key) then return sec.Read(key)
+    if index >= 0 then return PlaylistSources()[index].country
+    return ""
 end function
 
 sub saveCountry(country as String)
     sec = CreateObject("roRegistrySection", "FreeCinema")
-    sec.Write("country", country)
+    sec.Write("country_" + StrI(getSourceIndex()).Trim(), country)
     sec.Flush()
+end sub
+
+sub showSourcePicker()
+    current = getSourceIndex()
+    labels = []
+    sources = PlaylistSources()
+    for i = 0 to sources.Count() - 1
+        label = sources[i].name
+        if i = current then label = label + "   (last used)"
+        labels.Push(label)
+    end for
+    m.sourceHasCustom = false
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("playlistUrl") and sec.Read("playlistUrl") <> ""
+        label = "Custom playlist"
+        if current = -1 then label = label + "   (last used)"
+        labels.Push(label)
+        m.sourceHasCustom = true
+    end if
+    dialog = CreateObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Choose a source"
+    dialog.message = ["Pick which channel list to load."]
+    dialog.buttons = labels
+    dialog.observeFieldScoped("buttonSelected", "onSourceButton")
+    dialog.observeFieldScoped("wasClosed", "onSourceClosed")
+    m.sourceDialog = dialog
+    m.top.dialog = dialog
+end sub
+
+sub onSourceButton()
+    index = m.top.dialog.buttonSelected
+    if index >= PlaylistSources().Count() then index = -1
+    saveSourceIndex(index)
+    m.sourceDialog = invalid
+    m.top.dialog.close = true
+    loadPlaylist()
+end sub
+
+' Closed without a choice: a deep link loads the last source; Back at launch exits the app;
+' Back from the * menu keeps the current channels.
+sub onSourceClosed()
+    if m.sourceDialog = invalid then return
+    m.sourceDialog = invalid
+    if m.deepLinkClosing = true
+        m.deepLinkClosing = false
+        loadPlaylist()
+    else if m.launchFlow
+        m.top.exitApp = true
+    else if m.channels.Count() = 0
+        loadPlaylist()
+    else
+        restoreFocus()
+    end if
 end sub
 
 function getFilesUrl() as String
@@ -89,6 +183,7 @@ sub loadPlaylist()
     end if
 
     showStatus("Loading channels...")
+    m.loading.message = "Loading " + getSourceName()
     if m.task <> invalid
         m.task.unobserveField("rows")
         m.task.unobserveField("error")
@@ -125,6 +220,7 @@ sub onRowsLoaded()
     if m.pendingContentId <> invalid
         ' A deep link skips the quality prompt and goes straight to the channel.
         m.askedQuality = true
+        m.launchFlow = false
         playPendingDeepLink()
     else
         askQualityOnce()
@@ -154,6 +250,120 @@ sub onCategoryFocused()
         m.channelList.content = row
         m.channelList.jumpToItem = 0
     end if
+end sub
+
+' ---------- Settings helpers ----------
+
+' Moves an index by delta with wrap-around and stores it in the registry.
+function stepSetting(key as String, current as Integer, count as Integer, delta as Integer) as Integer
+    index = (current + delta + count) mod count
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    sec.Write(key, StrI(index).Trim())
+    sec.Flush()
+    return index
+end function
+
+' ---------- Subtitles ----------
+
+' Roku caption modes; "When mute" shows subtitles only while the TV is muted.
+function subtitleModes() as Object
+    return [
+        { mode: "Off",       label: "Off" }
+        { mode: "On",        label: "On" }
+        { mode: "When mute", label: "When muted" }
+    ]
+end function
+
+function getSubtitleIndex() as Integer
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("subtitles")
+        index = sec.Read("subtitles").ToInt()
+        if index >= 0 and index < subtitleModes().Count() then return index
+    end if
+    return 0
+end function
+
+' Caption looks, applied through Video.captionStyle. "Premium" is the default:
+' clean sans text with a soft shadow on a semi-transparent dark band.
+function subtitleStyles() as Object
+    return [
+        { label: "Premium", style: {
+            "Text/Font": "Sans", "Text/Size": "Medium", "Text/Color": "White", "Text/Opacity": "100%",
+            "Text/Effect": "Drop shadow (right)",
+            "Background/Color": "Black", "Background/Opacity": "50%",
+            "Window/Color": "Black", "Window/Opacity": "0%" } }
+        { label: "Cinema Gold", style: {
+            "Text/Font": "Sans", "Text/Size": "Medium", "Text/Color": "Yellow", "Text/Opacity": "100%",
+            "Text/Effect": "Drop shadow (right)",
+            "Background/Color": "Black", "Background/Opacity": "25%",
+            "Window/Color": "Black", "Window/Opacity": "0%" } }
+        { label: "Large", style: {
+            "Text/Font": "Sans", "Text/Size": "Large", "Text/Color": "White", "Text/Opacity": "100%",
+            "Text/Effect": "Drop shadow (right)",
+            "Background/Color": "Black", "Background/Opacity": "75%",
+            "Window/Color": "Black", "Window/Opacity": "0%" } }
+    ]
+end function
+
+function getSubtitleStyleIndex() as Integer
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("subtitleStyle")
+        index = sec.Read("subtitleStyle").ToInt()
+        if index >= 0 and index < subtitleStyles().Count() then return index
+    end if
+    return 0
+end function
+
+sub stepSubtitleStyle(delta as Integer)
+    stepSetting("subtitleStyle", getSubtitleStyleIndex(), subtitleStyles().Count(), delta)
+    applySubtitles()
+end sub
+
+sub applySubtitles()
+    m.video.globalCaptionMode = subtitleModes()[getSubtitleIndex()].mode
+    m.video.captionStyle = subtitleStyles()[getSubtitleStyleIndex()].style
+end sub
+
+' Cycles Off -> On -> When muted and reports whether the current channel carries subtitles.
+sub stepSubtitles(delta as Integer)
+    stepSetting("subtitles", getSubtitleIndex(), subtitleModes().Count(), delta)
+    applySubtitles()
+    updateHint()
+end sub
+
+sub cycleSubtitles()
+    stepSubtitles(1)
+    index = getSubtitleIndex()
+    text = "Subtitles: " + subtitleModes()[index].label
+    if index > 0 and m.playing <> invalid and not channelHasSubtitles()
+        text = text + "  -  this channel doesn't send subtitles"
+    end if
+    showToast(text)
+    updateHint()
+end sub
+
+function channelHasSubtitles() as Boolean
+    tracks = m.video.availableSubtitleTracks
+    return tracks <> invalid and tracks.Count() > 0
+end function
+
+' Shows a short message in the now-playing bar, then restores the channel name.
+sub showToast(text as String)
+    m.nowPlaying.text = text
+    m.toastActive = true
+    flashBar()
+    if m.toastTimer = invalid
+        m.toastTimer = CreateObject("roSGNode", "Timer")
+        m.toastTimer.duration = 3
+        m.toastTimer.observeField("fire", "onToastDone")
+    end if
+    m.toastTimer.control = "stop"
+    m.toastTimer.control = "start"
+end sub
+
+sub onToastDone()
+    m.toastActive = false
+    if m.playing <> invalid and m.video.state = "playing" then m.nowPlaying.text = "Now playing:  " + m.playing.title
 end sub
 
 ' ---------- Video quality ----------
@@ -196,7 +406,14 @@ sub showQualityPicker()
     m.top.dialog = dialog
 end sub
 
+sub stepQuality(delta as Integer)
+    stepSetting("quality", getQualityIndex(), qualityOptions().Count(), delta)
+    if m.playing <> invalid then playItem(m.playing)
+    updateHint()
+end sub
+
 sub onQualityButton()
+    m.qualityPicked = true
     index = m.top.dialog.buttonSelected
     sec = CreateObject("roRegistrySection", "FreeCinema")
     sec.Write("quality", StrI(index).Trim())
@@ -205,6 +422,14 @@ sub onQualityButton()
 end sub
 
 sub onQualityClosed()
+    ' Back on the launch quality menu returns to the source picker.
+    if m.launchFlow and m.qualityPicked <> true
+        m.askedQuality = false
+        showSourcePicker()
+        return
+    end if
+    m.launchFlow = false
+    m.qualityPicked = false
     ' Re-open the current stream so the new bandwidth cap applies.
     if m.playing <> invalid then playItem(m.playing)
     restoreFocus()
@@ -244,7 +469,7 @@ sub updateHint()
             base = base + chr(10) + "Play/Pause: add favorite"
         end if
     else if m.playing <> invalid
-        base = base + chr(10) + "Back: full screen"
+        base = base + chr(10) + "Back: full screen  -  Replay key: subtitles " + subtitleModes()[getSubtitleIndex()].label
     end if
     m.hint.text = base
 end sub
@@ -300,7 +525,13 @@ sub onLaunchArgs()
     args = m.top.launchArgs
     if args = invalid or args.contentId = invalid then return
     m.pendingContentId = args.contentId
-    if m.channels.Count() > 0 then playPendingDeepLink()
+    if m.sourceDialog <> invalid
+        ' Launched by a deep link: skip the source picker and use the last source.
+        m.deepLinkClosing = true
+        m.sourceDialog.close = true
+    else if m.channels.Count() > 0
+        playPendingDeepLink()
+    end if
 end sub
 
 ' Plays the channel named by the deep link (exact name, then partial name, then stream URL) in full screen.
@@ -431,7 +662,10 @@ sub onVideoState()
     state = m.video.state
     if m.playing = invalid then return
     if state = "playing"
-        m.nowPlaying.text = "Now playing:  " + m.playing.title
+        if m.toastActive <> true
+            m.nowPlaying.text = "Now playing:  " + m.playing.title
+            if getSubtitleIndex() = 1 and channelHasSubtitles() then m.nowPlaying.text = m.nowPlaying.text + "   [CC]"
+        end if
     else if state = "buffering"
         m.nowPlaying.text = "Loading  " + m.playing.title + " ..."
     else if state = "error"
@@ -511,45 +745,99 @@ end sub
 
 ' ---------- Dialogs ----------
 
+' ---------- Options menu ----------
+
+function menuRow(parent as Object, id as String, title as String, value as String, isToggle as Boolean) as Object
+    row = parent.CreateChild("ContentNode")
+    row.id = id
+    row.title = title
+    row.description = value
+    if isToggle then row.shortDescriptionLine1 = "toggle" else row.shortDescriptionLine1 = "action"
+    return row
+end function
+
+function hasCountryToggle() as Boolean
+    index = getSourceIndex()
+    return index >= 0 and PlaylistSources()[index].country <> ""
+end function
+
+function countryLabel() as String
+    if getCountry() = "" then return "All countries"
+    return "US only"
+end function
+
 sub showMenu()
-    dialog = CreateObject("roSGNode", "StandardMessageDialog")
-    dialog.title = "Ellis TV"
-    dialog.message = ["Choose an option"]
-    if getCountry() = ""
-        countryButton = "Show US channels only"
-    else
-        countryButton = "Show all countries"
-    end if
-    m.menuActions = []
-    labels = []
-    item = focusedChannel()
-    if item <> invalid
-        if isFavorite(item.url)
-            labels.Push("Remove """ + item.title + """ from favorites")
+    m.menuFavoriteItem = focusedChannel()
+    root = CreateObject("roSGNode", "ContentNode")
+    if m.menuFavoriteItem <> invalid
+        if isFavorite(m.menuFavoriteItem.url)
+            menuRow(root, "favorite", "Remove from favorites", m.menuFavoriteItem.title, false)
         else
-            labels.Push("Add """ + item.title + """ to favorites")
+            menuRow(root, "favorite", "Add to favorites", m.menuFavoriteItem.title, false)
         end if
-        m.menuActions.Push("favorite")
     end if
-    labels.Append(["Search channels", "Video quality: " + qualityOptions()[getQualityIndex()].short, countryButton, "Set playlist URL", "Set My Files website", "Reload playlist", "Cancel"])
-    m.menuActions.Append(["search", "quality", "country", "url", "files", "reload", "cancel"])
-    dialog.buttons = labels
-    dialog.observeFieldScoped("buttonSelected", "onMenuButton")
-    m.top.dialog = dialog
+    menuRow(root, "subtitles", "Subtitles", subtitleModes()[getSubtitleIndex()].label, true)
+    menuRow(root, "subtitleStyle", "Subtitle style", subtitleStyles()[getSubtitleStyleIndex()].label, true)
+    menuRow(root, "quality", "Video quality", qualityOptions()[getQualityIndex()].short, true)
+    if hasCountryToggle() then menuRow(root, "country", "Countries", countryLabel(), true)
+    menuRow(root, "source", "Source", getSourceName(), false)
+    menuRow(root, "search", "Search channels", "", false)
+    menuRow(root, "url", "Set playlist URL", "", false)
+    menuRow(root, "files", "Set My Files website", "", false)
+    menuRow(root, "reload", "Reload playlist", "", false)
+
+    m.optionsMenu.content = root
+    m.optionsMenu.visible = true
+    m.optionsMenu.active = true
 end sub
 
-sub onMenuButton()
-    action = m.menuActions[m.top.dialog.buttonSelected]
-    m.top.dialog.close = true
+sub closeMenu()
+    m.optionsMenu.visible = false
+    m.optionsMenu.active = false
+    restoreFocus()
+    if m.reloadOnClose = true
+        m.reloadOnClose = false
+        loadPlaylist()
+    end if
+end sub
+
+sub onMenuClosed()
+    closeMenu()
+end sub
+
+' A settings row was cycled: change the value and refresh just that row.
+sub onMenuCycle()
+    c = m.optionsMenu.cycle
+    row = m.optionsMenu.content.getChild(c.index)
+    if row = invalid then return
+    if row.id = "subtitles"
+        stepSubtitles(c.delta)
+        row.description = subtitleModes()[getSubtitleIndex()].label
+    else if row.id = "subtitleStyle"
+        stepSubtitleStyle(c.delta)
+        row.description = subtitleStyles()[getSubtitleStyleIndex()].label
+    else if row.id = "quality"
+        stepQuality(c.delta)
+        row.description = qualityOptions()[getQualityIndex()].short
+    else if row.id = "country"
+        if getCountry() = "" then saveCountry("us") else saveCountry("")
+        row.description = countryLabel()
+        m.reloadOnClose = true
+    end if
+end sub
+
+sub onMenuSelected()
+    row = m.optionsMenu.content.getChild(m.optionsMenu.selected)
+    if row = invalid then return
+    action = row.id
+    closeMenu()
     if action = "favorite"
-        toggleFocusedFavorite()
-    else if action = "quality"
-        showQualityPicker()
+        toggleFavorite(m.menuFavoriteItem.url)
+        updateHint()
+    else if action = "source"
+        showSourcePicker()
     else if action = "search"
         showKeyboard("Search channels", "", "search")
-    else if action = "country"
-        if getCountry() = "" then saveCountry("us") else saveCountry("")
-        loadPlaylist()
     else if action = "url"
         showKeyboard("Playlist URL (M3U)", getPlaylistUrl(), "url")
     else if action = "files"
@@ -606,6 +894,13 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    if m.optionsMenu.visible then return true
+
+    ' Replay (the curved-arrow key) toggles subtitles from anywhere.
+    if key = "replay"
+        cycleSubtitles()
+        return true
+    end if
 
     ' Full screen: Up/Down zaps, any other key brings the panel back.
     if not m.panelShown

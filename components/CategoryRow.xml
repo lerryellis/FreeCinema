@@ -12,7 +12,7 @@
         <Label
             id="name"
             translation="[16,0]"
-            width="176"
+            width="160"
             height="56"
             vertAlign="center"
             wrap="false"
@@ -20,8 +20,8 @@
             font="font:SmallestSystemFont"/>
         <Label
             id="count"
-            translation="[192,0]"
-            width="36"
+            translation="[176,0]"
+            width="52"
             height="56"
             vertAlign="center"
             horizAlign="right"

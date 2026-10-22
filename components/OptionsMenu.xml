@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Right-side options menu. Settings rows cycle in place (OK / Left / Right); action rows report selection. -->
+<component name="OptionsMenu" extends="Group">
+    <interface>
+        <field id="content" type="node" onChange="onContent"/>
+        <field id="active" type="boolean" onChange="onActive"/>
+        <!-- Outputs -->
+        <field id="selected" type="integer" alwaysNotify="true"/>
+        <field id="cycle" type="assocarray" alwaysNotify="true"/>
+        <field id="closed" type="boolean" alwaysNotify="true"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/OptionsMenu.brs"/>
+    <children>
+        <Rectangle width="1920" height="1080" color="0x00000060"/>
+        <Rectangle translation="[1200,0]" width="720" height="1080" color="0x0E0F14E8"/>
+        <Rectangle translation="[1200,0]" width="2" height="1080" color="0xF5C51860"/>
+        <Label translation="[1240,50]" text="Options" color="0xF5C518FF" font="font:LargeBoldSystemFont"/>
+        <Label translation="[1240,112]" width="640" text="OK or Left/Right changes a setting  -  Back closes" color="0x7C8091FF" font="font:SmallestSystemFont"/>
+        <MarkupList
+            id="list"
+            translation="[1240,170]"
+            itemComponentName="OptionRow"
+            itemSize="[640,68]"
+            itemSpacing="[0,6]"
+            numRows="12"
+            drawFocusFeedback="false"
+            vertFocusAnimationStyle="floatingFocus"/>
+    </children>
+</component>
