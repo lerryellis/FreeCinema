@@ -115,6 +115,40 @@ def logo_lockup(w, h, scale, with_text=True):
     return img.convert("RGB")
 
 
+def icon(w, h):
+    """Home-screen tile: compact ring badge on top, "Ellis TV" wordmark below."""
+    img = Image.new("RGBA", (w, h), BG + (255,))
+    cx = w // 2
+    cy = int(h * 0.36)
+    scale = h / 405 * 0.55
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    r = int(260 * scale)
+    ImageDraw.Draw(glow).ellipse((cx - r, cy - r, cx + r, cy + r), fill=GOLD + (45,))
+    img = Image.alpha_composite(img, glow.filter(ImageFilter.GaussianBlur(60 * scale)))
+    for part in (ring(int(380 * scale), RED, max(2, int(6 * scale)), 28, 12),
+                 ring(int(310 * scale), GOLD, max(2, int(5 * scale)), 70, 20),
+                 ring(int(244 * scale), GREEN, max(2, int(6 * scale)), 14, 10),
+                 badge(int(170 * scale))):
+        img.alpha_composite(part, (cx - part.width // 2, cy - part.height // 2))
+
+    d = ImageDraw.Draw(img)
+    f = font(int(h * 0.2))
+    gap = int(h * 0.03)
+    ew = d.textlength("Ellis", font=f)
+    tw = d.textlength("TV", font=f)
+    x = cx - (ew + gap + tw) / 2
+    ty = int(h * 0.67)
+    d.text((x, ty), "Ellis", font=f, fill=(255, 255, 255))
+    d.text((x + ew + gap, ty), "TV", font=f, fill=GOLD)
+    by = int(h * 0.92)
+    bw = int(w * 0.07)
+    bh = max(2, int(h * 0.012))
+    for i, col in enumerate([RED, GOLD, GREEN]):
+        bx = cx - int(1.5 * bw) + i * bw
+        d.rectangle((bx, by, bx + bw, by + bh), fill=col)
+    return img.convert("RGB")
+
+
 def main():
     ring(380, RED, 5, 28, 12).save("images/ring_outer.png")
     ring(310, GOLD, 4, 70, 20).save("images/ring_mid.png")
@@ -122,8 +156,8 @@ def main():
     badge(170).save("images/badge.png")
     glow_dot(48).save("images/glow.png")
     logo_lockup(1920, 1080, 1.0).save("images/splash_fhd.png")
-    logo_lockup(540, 405, 0.62, with_text=False).save("images/icon_fhd.png")
-    logo_lockup(290, 218, 0.34, with_text=False).save("images/icon_hd.png")
+    icon(540, 405).save("images/icon_fhd.png")
+    icon(290, 218).save("images/icon_hd.png")
     print("Brand images written to images/")
 
 
