@@ -100,8 +100,15 @@ function favoriteRowCount() as Integer
 end function
 
 ' Rebuilds the favorites rows at the top of m.allContent.
+' Callers must re-show the lists afterwards (showLists), because they are detached here.
 sub refreshFavoriteRows()
     if m.allContent = invalid then return
+    ' Detach the on-screen lists before editing their content: changing a MarkupList's
+    ' content tree while it is displayed (and animating focus) can hang the UI.
+    if not m.searchActive
+        m.channelList.content = invalid
+        m.categoryList.content = invalid
+    end if
     for i = 1 to favoriteRowCount()
         m.allContent.removeChildIndex(0)
     end for

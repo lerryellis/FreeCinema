@@ -885,8 +885,8 @@ sub onMenuSelected()
     action = row.id
     closeMenu()
     if action = "favorite"
-        toggleFavorite(m.menuFavoriteItem.url)
-        updateHint()
+        ' Same path as the Play/Pause key, so the panel is rebuilt and focus kept.
+        toggleFocusedFavorite()
     else if action = "source"
         showSourcePicker()
     else if action = "search"
