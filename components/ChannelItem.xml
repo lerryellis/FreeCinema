@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ChannelItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/ChannelItem.brs"/>
+    <children>
+        <Rectangle id="card" width="300" height="230" color="0x1C1E26FF"/>
+        <Poster
+            id="logo"
+            translation="[20,15]"
+            width="260"
+            height="150"
+            loadWidth="260"
+            loadHeight="150"
+            loadDisplayMode="scaleToFit"
+            loadingBitmapUri="pkg:/images/default_logo.png"
+            failedBitmapUri="pkg:/images/default_logo.png"/>
+        <Label
+            id="title"
+            translation="[10,172]"
+            width="280"
+            height="48"
+            horizAlign="center"
+            vertAlign="center"
+            wrap="false"
+            color="0xFFFFFFFF"
+            font="font:SmallestSystemFont"/>
+    </children>
+</component>

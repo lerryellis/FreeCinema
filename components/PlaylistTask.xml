@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="PlaylistTask" extends="Task">
+    <interface>
+        <field id="url" type="string"/>
+        <field id="country" type="string"/>
+        <field id="filesUrl" type="string"/>
+        <field id="channels" type="array"/>
+        <field id="rows" type="node"/>
+        <field id="error" type="string"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/Config.brs"/>
+    <script type="text/brightscript" uri="pkg:/components/Categories.brs"/>
+    <script type="text/brightscript" uri="pkg:/components/MyFiles.brs"/>
+    <script type="text/brightscript" uri="pkg:/components/PlaylistTask.brs"/>
+</component>
