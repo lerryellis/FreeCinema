@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ChannelRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged"/>
+        <field id="focusPercent" type="float" onChange="updateFocus"/>
+        <field id="listHasFocus" type="boolean" onChange="updateFocus"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/ChannelRow.brs"/>
+    <children>
+        <Rectangle id="base" width="356" height="84" color="0xFFFFFF0A"/>
+        <Rectangle id="highlight" width="356" height="84" color="0x2E3140FF" opacity="0"/>
+        <Rectangle id="accent" width="5" height="84" color="0xF5C518FF" opacity="0"/>
+        <Poster
+            id="logo"
+            translation="[14,9]"
+            width="110"
+            height="66"
+            loadWidth="110"
+            loadHeight="66"
+            loadDisplayMode="scaleToFit"
+            loadingBitmapUri="pkg:/images/default_logo.png"
+            failedBitmapUri="pkg:/images/default_logo.png"/>
+        <Label
+            id="title"
+            translation="[136,0]"
+            width="206"
+            height="84"
+            vertAlign="center"
+            wrap="true"
+            maxLines="2"
+            color="0xC8CAD4FF"
+            font="font:SmallestSystemFont"/>
+    </children>
+</component>

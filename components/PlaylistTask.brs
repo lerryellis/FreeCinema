@@ -47,7 +47,7 @@ function FetchText(url as String) as Dynamic
     xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
     xfer.InitClientCertificates()
     xfer.EnableEncodings(true)
-    xfer.AddHeader("User-Agent", "FreeCinema/1.0 (Roku)")
+    xfer.AddHeader("User-Agent", "EllisTV/1.0 (Roku)")
     if not xfer.AsyncGetToString() then return invalid
 
     msg = wait(30000, port)

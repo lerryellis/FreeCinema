@@ -4,44 +4,81 @@
     <script type="text/brightscript" uri="pkg:/components/Favorites.brs"/>
     <script type="text/brightscript" uri="pkg:/components/MainScene.brs"/>
     <children>
-        <Rectangle id="background" width="1920" height="1080" color="0x0E0F14FF"/>
-        <Label
-            id="header"
-            translation="[90,40]"
-            text="FreeCinema"
-            color="0xF5C518FF"
-            font="font:LargeBoldSystemFont"/>
-        <Label
-            id="hint"
-            translation="[90,105]"
-            width="1740"
-            text="Press * for Search, Playlist URL and Reload"
-            color="0xA0A3B1FF"
-            font="font:SmallSystemFont"/>
-        <RowList
-            id="rowList"
-            translation="[90,160]"
-            itemComponentName="ChannelItem"
-            numRows="3"
-            itemSize="[1740,290]"
-            itemSpacing="[0,20]"
-            rowItemSize="[[300,230]]"
-            rowItemSpacing="[[30,0]]"
-            showRowLabel="[true]"
-            rowLabelOffset="[[0,12]]"
-            rowLabelColor="0xFFFFFFFF"
-            rowLabelFont="font:MediumBoldSystemFont"
-            rowFocusAnimationStyle="floatingFocus"
-            vertFocusAnimationStyle="fixedFocus"
-            visible="false"/>
-        <Label
-            id="status"
-            translation="[90,480]"
-            width="1740"
-            horizAlign="center"
-            wrap="true"
-            color="0xFFFFFFFF"
-            font="font:MediumSystemFont"/>
-        <Video id="video" width="1920" height="1080" visible="false"/>
+        <Rectangle id="background" width="1920" height="1080" color="0x000000FF"/>
+
+        <!-- Always-on background player; the panel floats on top of it. -->
+        <Video id="video" width="1920" height="1080" enableUI="false"/>
+
+        <Group id="nowPlayingGroup" translation="[700,960]" opacity="0">
+            <Rectangle width="1160" height="80" color="0x0E0F14B0"/>
+            <Label
+                id="nowPlaying"
+                translation="[30,0]"
+                width="1100"
+                height="80"
+                vertAlign="center"
+                wrap="false"
+                color="0xFFFFFFFF"
+                font="font:SmallSystemFont"/>
+        </Group>
+
+        <Group id="panel">
+            <Rectangle id="panelBg" width="640" height="1080" color="0x0E0F14D0"/>
+            <Rectangle translation="[640,0]" width="2" height="1080" color="0xF5C51860"/>
+            <Label
+                id="header"
+                translation="[30,36]"
+                text="Ellis TV"
+                color="0xF5C518FF"
+                font="font:LargeBoldSystemFont"/>
+            <Label
+                id="hint"
+                translation="[30,96]"
+                width="590"
+                height="70"
+                wrap="true"
+                maxLines="2"
+                color="0xA0A3B1FF"
+                font="font:SmallestSystemFont"/>
+            <MarkupList
+                id="categoryList"
+                translation="[20,170]"
+                itemComponentName="CategoryRow"
+                itemSize="[236,56]"
+                itemSpacing="[0,4]"
+                numRows="14"
+                drawFocusFeedback="false"
+                vertFocusAnimationStyle="floatingFocus"/>
+            <Rectangle translation="[262,170]" width="1" height="860" color="0xFFFFFF30"/>
+            <MarkupList
+                id="channelList"
+                translation="[272,170]"
+                itemComponentName="ChannelRow"
+                itemSize="[356,84]"
+                itemSpacing="[0,6]"
+                numRows="10"
+                drawFocusFeedback="false"
+                vertFocusAnimationStyle="floatingFocus"/>
+            <Label
+                id="status"
+                translation="[30,480]"
+                width="580"
+                horizAlign="center"
+                wrap="true"
+                color="0xFFFFFFFF"
+                font="font:MediumSystemFont"/>
+        </Group>
+
+        <LoadingScreen id="loading"/>
+
+        <!-- Panel slide/fade and now-playing fade. Key values are set from code per direction. -->
+        <Animation id="panelAnim" duration="0.28" easeFunction="outCubic">
+            <Vector2DFieldInterpolator id="panelSlide" key="[0.0, 1.0]" keyValue="[[0,0],[0,0]]" fieldToInterp="panel.translation"/>
+            <FloatFieldInterpolator id="panelFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="panel.opacity"/>
+        </Animation>
+        <Animation id="barAnim" duration="0.25" easeFunction="outQuad">
+            <FloatFieldInterpolator id="barFade" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="nowPlayingGroup.opacity"/>
+        </Animation>
+        <Timer id="barTimer" duration="4" repeat="false"/>
     </children>
 </component>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Animated brand loading screen. Lines up exactly with images/splash_fhd.png. -->
+<component name="LoadingScreen" extends="Group">
+    <interface>
+        <field id="dismiss" type="boolean" onChange="onDismiss"/>
+        <field id="message" type="string" onChange="onMessage"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/LoadingScreen.brs"/>
+    <children>
+      <Group id="root">
+        <Rectangle width="1920" height="1080" color="0x0B0C10FF"/>
+        <Poster id="halo" uri="pkg:/images/glow.png" translation="[610,71]" width="700" height="700" blendColor="0xFCD116FF" opacity="0.3"/>
+        <Group id="particles"/>
+
+        <Poster id="ringOuter" uri="pkg:/images/ring_outer.png" translation="[770,231]" width="380" height="380" scaleRotateCenter="[190,190]"/>
+        <Poster id="ringMid" uri="pkg:/images/ring_mid.png" translation="[805,266]" width="310" height="310" scaleRotateCenter="[155,155]"/>
+        <Poster id="ringInner" uri="pkg:/images/ring_inner.png" translation="[838,299]" width="244" height="244" scaleRotateCenter="[122,122]"/>
+        <Poster id="badge" uri="pkg:/images/badge.png" translation="[875,336]" width="170" height="170" scaleRotateCenter="[85,85]"/>
+
+        <LayoutGroup translation="[960,668]" layoutDirection="horiz" horizAlignment="center" itemSpacings="[24]">
+            <Label text="Ellis" color="0xFFFFFFFF">
+                <Font role="font" uri="font:BoldSystemFontFile" size="96"/>
+            </Label>
+            <Label text="TV" color="0xFCD116FF">
+                <Font role="font" uri="font:BoldSystemFontFile" size="96"/>
+            </Label>
+        </LayoutGroup>
+
+        <Group id="ghanaBar" translation="[870,801]" clippingRect="[0,0,180,8]">
+            <Rectangle width="60" height="8" color="0xCE1126FF"/>
+            <Rectangle translation="[60,0]" width="60" height="8" color="0xFCD116FF"/>
+            <Rectangle translation="[120,0]" width="60" height="8" color="0x006B3FFF"/>
+            <Rectangle id="shimmer" width="24" height="8" color="0xFFFFFF90"/>
+        </Group>
+
+        <Label translation="[0,832]" width="1920" horizAlign="center" text="Vibrant Ghanaian &amp; Global Live TV" color="0xC8CAD4FF">
+            <Font role="font" uri="font:SystemFontFile" size="34"/>
+        </Label>
+        <Label id="status" translation="[0,960]" width="1920" horizAlign="center" text="Loading channels" color="0x7C8091FF" font="font:SmallestSystemFont"/>
+
+      </Group>
+
+        <!-- Continuous motion -->
+        <Animation id="spin" duration="14" repeat="true" easeFunction="linear">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 6.2832]" fieldToInterp="ringOuter.rotation"/>
+        </Animation>
+        <Animation id="spinMid" duration="9" repeat="true" easeFunction="linear">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, -6.2832]" fieldToInterp="ringMid.rotation"/>
+        </Animation>
+        <Animation id="spinInner" duration="6" repeat="true" easeFunction="linear">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 6.2832]" fieldToInterp="ringInner.rotation"/>
+        </Animation>
+        <Animation id="pulse" duration="1.8" repeat="true" easeFunction="inOutQuad">
+            <Vector2DFieldInterpolator key="[0.0, 0.5, 1.0]" keyValue="[[1.0,1.0],[1.07,1.07],[1.0,1.0]]" fieldToInterp="badge.scale"/>
+            <FloatFieldInterpolator key="[0.0, 0.5, 1.0]" keyValue="[0.22, 0.42, 0.22]" fieldToInterp="halo.opacity"/>
+        </Animation>
+        <Animation id="sweep" duration="1.4" repeat="true" easeFunction="inOutCubic">
+            <Vector2DFieldInterpolator key="[0.0, 1.0]" keyValue="[[-24,0],[180,0]]" fieldToInterp="shimmer.translation"/>
+        </Animation>
+        <Animation id="fadeOut" duration="0.6" easeFunction="outQuad">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[1.0, 0.0]" fieldToInterp="root.opacity"/>
+        </Animation>
+    </children>
+</component>

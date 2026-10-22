@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="CategoryRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged"/>
+        <field id="focusPercent" type="float" onChange="updateFocus"/>
+        <field id="listHasFocus" type="boolean" onChange="updateFocus"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/CategoryRow.brs"/>
+    <children>
+        <Rectangle id="highlight" width="236" height="56" color="0x2E3140FF" opacity="0"/>
+        <Rectangle id="accent" width="5" height="56" color="0xF5C518FF" opacity="0"/>
+        <Label
+            id="name"
+            translation="[16,0]"
+            width="176"
+            height="56"
+            vertAlign="center"
+            wrap="false"
+            color="0xC8CAD4FF"
+            font="font:SmallestSystemFont"/>
+        <Label
+            id="count"
+            translation="[192,0]"
+            width="36"
+            height="56"
+            vertAlign="center"
+            horizAlign="right"
+            color="0x7C8091FF"
+            font="font:SmallestSystemFont"/>
+    </children>
+</component>

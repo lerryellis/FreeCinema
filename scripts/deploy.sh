@@ -11,14 +11,14 @@ cd "$(dirname "$0")/.."
 : "${ROKU_PASS:?Set ROKU_PASS to the developer password you chose when enabling Developer Mode}"
 
 mkdir -p out
-rm -f out/FreeCinema.zip
-zip -qr out/FreeCinema.zip manifest source components images
-echo "Packaged out/FreeCinema.zip"
+rm -f out/EllisTV.zip
+zip -qr out/EllisTV.zip manifest source components images
+echo "Packaged out/EllisTV.zip"
 
 echo "Uploading to Roku at $ROKU_IP ..."
 response=$(curl -sS --digest -u "rokudev:$ROKU_PASS" \
     -F "mysubmit=Install" \
-    -F "archive=@out/FreeCinema.zip" \
+    -F "archive=@out/EllisTV.zip" \
     "http://$ROKU_IP/plugin_install")
 
 if echo "$response" | grep -qiE "Install Success|Identical to previous version"; then
