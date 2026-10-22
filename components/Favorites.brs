@@ -90,28 +90,16 @@ function toggleFavorite(url as String) as Boolean
 end function
 
 function favoriteRowCount() as Integer
-    count = 0
-    if m.allContent = invalid then return 0
-    for i = 0 to m.allContent.getChildCount() - 1
-        if Left(m.allContent.getChild(i).id, 4) <> "fav:" then exit for
-        count = count + 1
-    end for
-    return count
+    if m.favRows = invalid then return 0
+    return m.favRows.Count()
 end function
 
-' Rebuilds the favorites rows at the top of m.allContent.
-' Callers must re-show the lists afterwards (showLists), because they are detached here.
+' Rebuilds m.favRows (render-thread nodes shown above the categories). The loaded playlist rows
+' were created by the PlaylistTask thread and must never be modified here: changing them after
+' the task has finished blocks the render thread forever (the UI freeze).
 sub refreshFavoriteRows()
+    m.favRows = []
     if m.allContent = invalid then return
-    ' Detach the on-screen lists before editing their content: changing a MarkupList's
-    ' content tree while it is displayed (and animating focus) can hang the UI.
-    if not m.searchActive
-        m.channelList.content = invalid
-        m.categoryList.content = invalid
-    end if
-    for i = 1 to favoriteRowCount()
-        m.allContent.removeChildIndex(0)
-    end for
 
     favs = []
     for each url in m.favorites
@@ -121,19 +109,27 @@ sub refreshFavoriteRows()
     if favs.Count() = 0 then return
     favs.SortBy("name", "i")
 
-    rows = [makeFavoriteRow("All", favs)]
+    m.favRows.Push(makeFavoriteRow("All", favs))
     for each name in m.rowNames
         matches = []
         for each ch in favs
             if channelInRow(ch, name) then matches.Push(ch)
         end for
-        if matches.Count() > 0 then rows.Push(makeFavoriteRow(name, matches))
-    end for
-
-    for i = 0 to rows.Count() - 1
-        m.allContent.insertChild(rows[i], i)
+        if matches.Count() > 0 then m.favRows.Push(makeFavoriteRow(name, matches))
     end for
 end sub
+
+' All rows for the panel: favorites first, then the playlist categories.
+function allRows() as Object
+    rows = []
+    if m.favRows <> invalid then rows.Append(m.favRows)
+    if m.allContent <> invalid
+        for i = 0 to m.allContent.getChildCount() - 1
+            rows.Push(m.allContent.getChild(i))
+        end for
+    end if
+    return rows
+end function
 
 function makeFavoriteRow(name as String, channels as Object) as Object
     row = CreateObject("roSGNode", "ContentNode")

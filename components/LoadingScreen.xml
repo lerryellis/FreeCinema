@@ -8,7 +8,8 @@
     <script type="text/brightscript" uri="pkg:/components/LoadingScreen.brs"/>
     <children>
       <Group id="root">
-        <Rectangle width="1920" height="1080" color="0x0B0C10FF"/>
+        <!-- Semi-transparent so the resumed channel plays visibly behind the animation. -->
+        <Rectangle width="1920" height="1080" color="0x0B0C10A8"/>
         <Poster id="halo" uri="pkg:/images/glow.png" translation="[610,71]" width="700" height="700" blendColor="0xFCD116FF" opacity="0.3"/>
         <Group id="particles"/>
 

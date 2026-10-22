@@ -21,6 +21,8 @@ sub init()
     m.barTimer.observeField("fire", "onBarTimer")
     m.panelShown = true
     m.barShown = false
+    ' Hidden until the first load finishes, so the loading screen shows the video behind it.
+    m.panel.visible = false
 
     m.categoryList.observeField("itemFocused", "onCategoryFocused")
     m.channelList.observeField("itemSelected", "onChannelSelected")
@@ -30,7 +32,8 @@ sub init()
 
     m.channels = []
     m.allContent = invalid
-    m.listContent = invalid
+    m.listRows = invalid
+    m.favRows = []
     m.searchActive = false
     m.task = invalid
     m.channelByUrl = {}
@@ -46,6 +49,11 @@ sub init()
     m.pendingContentId = invalid
     m.sourceDialog = invalid
     initTip()
+    dsec = CreateObject("roRegistrySection", "FreeCinemaDebug")
+    if dsec.Exists("last")
+        dsec.Delete("last")
+        dsec.Flush()
+    end if
 
     ' Start straight into the last source. Only the very first run (or after the
     ' Roku's saved data is wiped) asks which source to use.
@@ -225,22 +233,35 @@ sub onRowsLoaded()
     refreshFavoriteRows()
 
     m.searchActive = false
-    showLists(m.allContent, 0, 0)
+    showLists(allRows(), 0, 0)
+    revealPlayingChannel()
+    m.panel.visible = true
+    if m.playing <> invalid then setBarVisible(true)
     m.loading.dismiss = true
     m.launchFlow = false
     if m.top.dialog = invalid then m.categoryList.setFocus(true)
     if m.pendingContentId <> invalid then playPendingDeepLink()
 end sub
 
-' Shows a rows tree (root > category rows > channels) in the two-column panel.
-sub showLists(content as Object, categoryIndex as Integer, channelIndex as Integer)
-    m.listContent = content
-    m.categoryList.content = content
-    if categoryIndex >= content.getChildCount() then categoryIndex = 0
-    m.categoryList.jumpToItem = categoryIndex
-    m.channelList.content = content.getChild(categoryIndex)
-    if m.channelList.content <> invalid and channelIndex < m.channelList.content.getChildCount()
-        m.channelList.jumpToItem = channelIndex
+' Shows rows (array of row ContentNodes whose children are channels) in the two-column panel.
+' The category column gets its own small render-thread node list that only mirrors titles,
+' so the row nodes themselves are never re-parented or modified.
+sub showLists(rows as Object, categoryIndex as Integer, channelIndex as Integer)
+    m.listRows = rows
+    titles = CreateObject("roSGNode", "ContentNode")
+    for each row in rows
+        t = titles.CreateChild("ContentNode")
+        t.title = row.title
+        t.id = row.id
+    end for
+    m.categoryList.content = titles
+    if categoryIndex >= rows.Count() then categoryIndex = 0
+    if rows.Count() > 0
+        m.categoryList.jumpToItem = categoryIndex
+        m.channelList.content = rows[categoryIndex]
+        if channelIndex < rows[categoryIndex].getChildCount() then m.channelList.jumpToItem = channelIndex
+    else
+        m.channelList.content = invalid
     end if
     m.status.visible = false
     m.categoryList.visible = true
@@ -249,9 +270,11 @@ sub showLists(content as Object, categoryIndex as Integer, channelIndex as Integ
 end sub
 
 sub onCategoryFocused()
-    if m.listContent = invalid then return
-    row = m.listContent.getChild(m.categoryList.itemFocused)
-    if row <> invalid and not row.isSameNode(m.channelList.content)
+    if m.listRows = invalid then return
+    index = m.categoryList.itemFocused
+    if index < 0 or index >= m.listRows.Count() then return
+    row = m.listRows[index]
+    if m.channelList.content = invalid or not row.isSameNode(m.channelList.content)
         m.channelList.content = row
         m.channelList.jumpToItem = 0
     end if
@@ -467,7 +490,7 @@ sub restoreFocus()
         m.top.setFocus(true)
     else if m.channelList.content <> invalid and m.channelList.content.getChildCount() > 0 and m.focusOnChannels = true
         m.channelList.setFocus(true)
-    else if m.listContent <> invalid
+    else if m.listRows <> invalid
         m.categoryList.setFocus(true)
     else
         m.top.setFocus(true)
@@ -515,15 +538,19 @@ sub toggleFocusedFavorite()
 
     ' Favorites rows were rebuilt above the other categories: re-select the same category.
     if not m.searchActive
-        categoryIndex = 0
-        for i = 0 to m.allContent.getChildCount() - 1
-            if m.allContent.getChild(i).id = categoryId
+        rows = allRows()
+        categoryIndex = -1
+        for i = 0 to rows.Count() - 1
+            if rows[i].id = categoryId
                 categoryIndex = i
                 exit for
             end if
         end for
-        if m.allContent.getChild(categoryIndex).id <> categoryId then channelIndex = 0
-        showLists(m.allContent, categoryIndex, channelIndex)
+        if categoryIndex = -1
+            categoryIndex = 0
+            channelIndex = 0
+        end if
+        showLists(rows, categoryIndex, channelIndex)
         if m.channelList.content <> invalid and m.channelList.content.getChildCount() > 0
             m.channelList.setFocus(true)
         else
@@ -534,6 +561,7 @@ sub toggleFocusedFavorite()
 end sub
 
 sub onLoadError()
+    m.panel.visible = true
     m.loading.dismiss = true
     m.launchFlow = false
     showStatus(m.task.error + chr(10) + chr(10) + "Press * to change the playlist URL or reload.")
@@ -592,11 +620,49 @@ sub playPendingDeepLink()
     hidePanel()
 end sub
 
+' Moves the panel to the playing channel: stays in the current category if it's there,
+' otherwise uses Favorites (if it's a favorite) or the first category the channel belongs to.
+sub revealPlayingChannel()
+    if m.playing = invalid or m.searchActive or m.listRows = invalid then return
+    url = m.playing.url
+
+    candidates = []
+    if m.channelList.content <> invalid then candidates.Push(m.channelList.content.id)
+    if isFavorite(url) then candidates.Push("fav:All")
+    ch = m.channelByUrl[url]
+    if ch <> invalid and ch.cats <> invalid then candidates.Append(ch.cats)
+
+    for each wanted in candidates
+        for i = 0 to m.listRows.Count() - 1
+            row = m.listRows[i]
+            if row.id = wanted
+                index = indexOfUrl(row, url)
+                if index >= 0
+                    if not row.isSameNode(m.channelList.content) then showLists(m.listRows, i, index)
+                    m.channelList.jumpToItem = index
+                    m.focusOnChannels = true
+                    if m.panelShown and m.top.dialog = invalid and not m.optionsMenu.visible then m.channelList.setFocus(true)
+                    updateHint()
+                    return
+                end if
+            end if
+        end for
+    end for
+end sub
+
+function indexOfUrl(row as Object, url as String) as Integer
+    for i = 0 to row.getChildCount() - 1
+        if row.getChild(i).url = url then return i
+    end for
+    return -1
+end function
+
 ' ---------- Panel ----------
 
 sub showPanel()
     if not m.panelShown
         m.panelShown = true
+        revealPlayingChannel()
         animatePanel(true)
     end if
     m.barTimer.control = "stop"
@@ -670,7 +736,10 @@ sub playItem(item as Object)
     m.video.content = content
     m.video.control = "play"
     m.nowPlaying.text = "Loading  " + item.title + " ..."
-    if m.panelShown then setBarVisible(true) else flashBar()
+    ' During the first load the loading screen covers the bar area; it appears once loading ends.
+    if m.panel.visible
+        if m.panelShown then setBarVisible(true) else flashBar()
+    end if
     saveLastChannel(content)
     updateHint()
 end sub
@@ -755,7 +824,7 @@ sub doSearch(query as String)
 
     row.title = "Search: " + query.Trim() + "  (" + StrI(count).Trim() + ")"
     m.searchActive = true
-    showLists(results, 0, 0)
+    showLists([row], 0, 0)
     m.focusOnChannels = true
     m.channelList.setFocus(true)
     updateHint()
@@ -764,7 +833,7 @@ end sub
 sub clearSearch()
     m.searchActive = false
     if m.allContent <> invalid
-        showLists(m.allContent, 0, 0)
+        showLists(allRows(), 0, 0)
         m.focusOnChannels = false
         m.categoryList.setFocus(true)
     end if
