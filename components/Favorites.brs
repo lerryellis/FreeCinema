@@ -27,6 +27,45 @@ sub saveFavorites()
     sec.Flush()
 end sub
 
+' Adds each DefaultFavorites() name the first time it appears in any loaded source.
+' Restored names are remembered in "favSeeded" (same registry), so a wipe brings the backup back
+' while favorites you remove later stay removed.
+sub seedDefaultFavorites()
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    done = {}
+    if sec.Exists("favSeeded")
+        saved = ParseJson(sec.Read("favSeeded"))
+        if type(saved) = "roArray"
+            for each name in saved
+                done[name] = true
+            end for
+        end if
+    end if
+    wanted = {}
+    for each name in DefaultFavorites()
+        if not done.DoesExist(LCase(name)) then wanted[LCase(name)] = true
+    end for
+    if wanted.Count() = 0 then return
+
+    added = 0
+    for each ch in m.channels
+        key = LCase(ch.name)
+        if wanted.DoesExist(key) and m.favorites.Count() < MaxFavorites()
+            if not isFavorite(ch.url)
+                m.favorites.Push(ch.url)
+                m.favSet[ch.url] = true
+            end if
+            wanted.Delete(key)
+            done[key] = true
+            added = added + 1
+        end if
+    end for
+    if added = 0 then return
+    saveFavorites()
+    sec.Write("favSeeded", FormatJson(done.Keys()))
+    sec.Flush()
+end sub
+
 function isFavorite(url as String) as Boolean
     return m.favSet.DoesExist(url)
 end function

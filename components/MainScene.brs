@@ -42,12 +42,22 @@ sub init()
     last = loadLastChannel()
     if last <> invalid then playItem(last)
 
-    m.askedQuality = false
-    m.launchFlow = true
+    m.askedQuality = true
     m.pendingContentId = invalid
     m.sourceDialog = invalid
-    m.loading.message = "Choose a source"
-    showSourcePicker()
+    initTip()
+
+    ' Start straight into the last source. Only the very first run (or after the
+    ' Roku's saved data is wiped) asks which source to use.
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("source") or sec.Exists("playlistUrl")
+        m.launchFlow = false
+        loadPlaylist()
+    else
+        m.launchFlow = true
+        m.loading.message = "Choose a source"
+        showSourcePicker()
+    end if
 end sub
 
 ' The quality picker waits until the loading screen has faded, so the brand animation is visible.
@@ -211,20 +221,15 @@ sub onRowsLoaded()
     for i = 0 to m.allContent.getChildCount() - 1
         m.rowNames.Push(m.allContent.getChild(i).id)
     end for
+    seedDefaultFavorites()
     refreshFavoriteRows()
 
     m.searchActive = false
     showLists(m.allContent, 0, 0)
     m.loading.dismiss = true
-    m.categoryList.setFocus(true)
-    if m.pendingContentId <> invalid
-        ' A deep link skips the quality prompt and goes straight to the channel.
-        m.askedQuality = true
-        m.launchFlow = false
-        playPendingDeepLink()
-    else
-        askQualityOnce()
-    end if
+    m.launchFlow = false
+    if m.top.dialog = invalid then m.categoryList.setFocus(true)
+    if m.pendingContentId <> invalid then playPendingDeepLink()
 end sub
 
 ' Shows a rows tree (root > category rows > channels) in the two-column panel.
@@ -250,6 +255,27 @@ sub onCategoryFocused()
         m.channelList.content = row
         m.channelList.jumpToItem = 0
     end if
+end sub
+
+' ---------- Tip ----------
+
+' For the first few launches (until the menu has been opened) the hint points to the * menu.
+sub initTip()
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    launches = 0
+    if sec.Exists("launches") then launches = sec.Read("launches").ToInt()
+    launches = launches + 1
+    sec.Write("launches", StrI(launches).Trim())
+    sec.Flush()
+    m.showTip = launches <= 5 and not sec.Exists("menuUsed")
+end sub
+
+sub markMenuUsed()
+    if m.showTip <> true then return
+    m.showTip = false
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    sec.Write("menuUsed", "1")
+    sec.Flush()
 end sub
 
 ' ---------- Settings helpers ----------
@@ -462,7 +488,9 @@ sub updateHint()
         base = StrI(m.channels.Count()).Trim() + " channels  -  " + qualityOptions()[getQualityIndex()].short + "  -  * Menu"
     end if
     item = focusedChannel()
-    if item <> invalid
+    if m.showTip = true
+        base = base + chr(10) + "Tip: press * to change source, quality or subtitles"
+    else if item <> invalid
         if isFavorite(item.url)
             base = base + chr(10) + "Play/Pause: remove favorite"
         else
@@ -507,7 +535,7 @@ end sub
 
 sub onLoadError()
     m.loading.dismiss = true
-    askQualityOnce()
+    m.launchFlow = false
     showStatus(m.task.error + chr(10) + chr(10) + "Press * to change the playlist URL or reload.")
 end sub
 
@@ -745,6 +773,22 @@ end sub
 
 ' ---------- Dialogs ----------
 
+' Steps through the built-in sources, plus the custom playlist when one is saved.
+sub stepSource(delta as Integer)
+    choices = []
+    for i = 0 to PlaylistSources().Count() - 1
+        choices.Push(i)
+    end for
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("playlistUrl") and sec.Read("playlistUrl") <> "" then choices.Push(-1)
+    choice = 0
+    for i = 0 to choices.Count() - 1
+        if choices[i] = getSourceIndex() then choice = i
+    end for
+    choice = (choice + delta + choices.Count()) mod choices.Count()
+    saveSourceIndex(choices[choice])
+end sub
+
 ' ---------- Options menu ----------
 
 function menuRow(parent as Object, id as String, title as String, value as String, isToggle as Boolean) as Object
@@ -767,6 +811,8 @@ function countryLabel() as String
 end function
 
 sub showMenu()
+    markMenuUsed()
+    updateHint()
     m.menuFavoriteItem = focusedChannel()
     root = CreateObject("roSGNode", "ContentNode")
     if m.menuFavoriteItem <> invalid
@@ -776,11 +822,12 @@ sub showMenu()
             menuRow(root, "favorite", "Add to favorites", m.menuFavoriteItem.title, false)
         end if
     end if
+    m.menuStartSource = getSourceIndex()
+    menuRow(root, "source", "Source", getSourceName(), true)
     menuRow(root, "subtitles", "Subtitles", subtitleModes()[getSubtitleIndex()].label, true)
     menuRow(root, "subtitleStyle", "Subtitle style", subtitleStyles()[getSubtitleStyleIndex()].label, true)
     menuRow(root, "quality", "Video quality", qualityOptions()[getQualityIndex()].short, true)
     if hasCountryToggle() then menuRow(root, "country", "Countries", countryLabel(), true)
-    menuRow(root, "source", "Source", getSourceName(), false)
     menuRow(root, "search", "Search channels", "", false)
     menuRow(root, "url", "Set playlist URL", "", false)
     menuRow(root, "files", "Set My Files website", "", false)
@@ -795,8 +842,9 @@ sub closeMenu()
     m.optionsMenu.visible = false
     m.optionsMenu.active = false
     restoreFocus()
-    if m.reloadOnClose = true
+    if m.reloadOnClose = true or m.sourceChanged = true
         m.reloadOnClose = false
+        m.sourceChanged = false
         loadPlaylist()
     end if
 end sub
@@ -810,7 +858,12 @@ sub onMenuCycle()
     c = m.optionsMenu.cycle
     row = m.optionsMenu.content.getChild(c.index)
     if row = invalid then return
-    if row.id = "subtitles"
+    if row.id = "source"
+        stepSource(c.delta)
+        row.description = getSourceName()
+        ' Reload once when the menu closes, and only if the source really changed.
+        m.sourceChanged = getSourceIndex() <> m.menuStartSource
+    else if row.id = "subtitles"
         stepSubtitles(c.delta)
         row.description = subtitleModes()[getSubtitleIndex()].label
     else if row.id = "subtitleStyle"

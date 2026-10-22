@@ -14,6 +14,23 @@ function DefaultFilesUrl() as String
     return ""
 end function
 
+' Backup favorites (channel names). Restored automatically when the Roku's saved data is empty,
+' e.g. after the app is deleted or the device is reset.
+function DefaultFavorites() as Object
+    return [
+        "CBS Sports HQ"
+        "Fast&FunBox"
+        "MUTV"
+        "NBC Sports NOW"
+        "PGA Tour"
+        "Real Madrid TV English"
+        "Red Bull TV"
+        "Red Bull TV UK"
+        "Red Bull TV US"
+        "Sky Sports F1"
+    ]
+end function
+
 function DefaultLogoUri() as String
     return "pkg:/images/default_logo.png"
 end function
