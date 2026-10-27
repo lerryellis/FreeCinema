@@ -30,6 +30,19 @@ sub init()
     m.video.observeField("state", "onVideoState")
     applySubtitles()
 
+    ' Playback helpers: a stall watchdog and a short delay before re-opening the stream
+    ' after quality changes, so stepping through options doesn't restart it on every press.
+    m.playToken = 0
+    m.variantTask = invalid
+    m.stallTimer = CreateObject("roSGNode", "Timer")
+    m.stallTimer.duration = 20
+    m.stallTimer.observeField("fire", "onStallTimer")
+    m.top.appendChild(m.stallTimer)
+    m.qualityTimer = CreateObject("roSGNode", "Timer")
+    m.qualityTimer.duration = 1.2
+    m.qualityTimer.observeField("fire", "onQualityTimer")
+    m.top.appendChild(m.qualityTimer)
+
     m.channels = []
     m.allContent = invalid
     m.listRows = invalid
@@ -420,11 +433,11 @@ end sub
 ' Labels and max bandwidth (Kbps) for adaptive streams. 0 = no cap (Auto).
 function qualityOptions() as Object
     return [
-        { label: "Auto (best available)", short: "Auto",  kbps: 0 }
-        { label: "1080p - High",          short: "1080p", kbps: 7000 }
-        { label: "720p - Medium",         short: "720p",  kbps: 3500 }
-        { label: "480p - Low",            short: "480p",  kbps: 1500 }
-        { label: "360p - Data Saver",     short: "360p",  kbps: 900 }
+        { label: "Auto (best available)", short: "Auto",  kbps: 0,    height: 0 }
+        { label: "1080p - High",          short: "1080p", kbps: 8000, height: 1080 }
+        { label: "720p - Medium",         short: "720p",  kbps: 4500, height: 720 }
+        { label: "480p - Low",            short: "480p",  kbps: 2000, height: 480 }
+        { label: "360p - Data Saver",     short: "360p",  kbps: 1200, height: 360 }
     ]
 end function
 
@@ -457,13 +470,20 @@ end sub
 
 sub stepQuality(delta as Integer)
     stepSetting("quality", getQualityIndex(), qualityOptions().Count(), delta)
-    if m.playing <> invalid then playItem(m.playing)
+    ' Re-open the stream once the user stops pressing left/right.
+    m.qualityTimer.control = "stop"
+    m.qualityTimer.control = "start"
     updateHint()
+end sub
+
+sub onQualityTimer()
+    if m.playing <> invalid then playItem(m.playing)
 end sub
 
 sub onQualityButton()
     m.qualityPicked = true
     index = m.top.dialog.buttonSelected
+    m.qualityChanged = (index <> getQualityIndex())
     sec = CreateObject("roRegistrySection", "FreeCinema")
     sec.Write("quality", StrI(index).Trim())
     sec.Flush()
@@ -479,8 +499,9 @@ sub onQualityClosed()
     end if
     m.launchFlow = false
     m.qualityPicked = false
-    ' Re-open the current stream so the new bandwidth cap applies.
-    if m.playing <> invalid then playItem(m.playing)
+    ' Re-open the current stream only if the quality actually changed.
+    if m.qualityChanged = true and m.playing <> invalid then playItem(m.playing)
+    m.qualityChanged = false
     restoreFocus()
     updateHint()
 end sub
@@ -729,12 +750,34 @@ sub playItem(item as Object)
     content.url = item.url
     content.streamFormat = item.streamFormat
     content.HDPosterUrl = item.HDPosterUrl
-    kbps = qualityOptions()[getQualityIndex()].kbps
-    if kbps > 0 then content.MaxBandwidth = kbps
     if item.HttpHeaders <> invalid and item.HttpHeaders.Count() > 0 then content.HttpHeaders = item.HttpHeaders
+    ' m.playing always keeps the channel's own URL (favorites, resume and "is this playing" use it).
     m.playing = content
-    m.video.content = content
-    m.video.control = "play"
+    m.playToken = m.playToken + 1
+    m.fallbackTried = false
+    m.restartTried = false
+
+    quality = qualityOptions()[getQualityIndex()]
+    if quality.kbps > 0 and content.streamFormat = "hls"
+        ' Lock to one rendition so the picture doesn't keep switching quality.
+        m.video.control = "stop"
+        if m.variantTask <> invalid then m.variantTask.unobserveField("result")
+        m.variantTask = CreateObject("roSGNode", "VariantTask")
+        m.variantTask.url = content.url
+        if content.HttpHeaders <> invalid then m.variantTask.headers = content.HttpHeaders
+        m.variantTask.maxKbps = quality.kbps
+        m.variantTask.maxHeight = quality.height
+        m.variantTask.token = m.playToken
+        m.variantTask.observeField("result", "onVariantResult")
+        m.variantTask.control = "run"
+        m.variantPending = true
+        ' Never wait on the rendition lookup for long: play the channel's own URL instead.
+        m.stallTimer.duration = 6
+        m.stallTimer.control = "stop"
+        m.stallTimer.control = "start"
+    else
+        startVideo(content.url, false)
+    end if
     m.nowPlaying.text = "Loading  " + item.title + " ..."
     ' During the first load the loading screen covers the bar area; it appears once loading ends.
     if m.panel.visible
@@ -742,6 +785,67 @@ sub playItem(item as Object)
     end if
     saveLastChannel(content)
     updateHint()
+end sub
+
+sub onVariantResult()
+    r = m.variantTask.result
+    if r = invalid or r.token <> m.playToken or m.variantPending <> true then return
+    m.variantPending = false
+    startVideo(r.url, r.locked)
+end sub
+
+' Plays url using the current channel's details. locked = a single fixed rendition was chosen;
+' otherwise the channel URL is played with the quality setting as a bandwidth cap.
+sub startVideo(url as String, locked as Boolean)
+    if m.playing = invalid then return
+    vc = CreateObject("roSGNode", "ContentNode")
+    vc.title = m.playing.title
+    vc.url = url
+    vc.streamFormat = m.playing.streamFormat
+    vc.HDPosterUrl = m.playing.HDPosterUrl
+    if m.playing.HttpHeaders <> invalid and m.playing.HttpHeaders.Count() > 0 then vc.HttpHeaders = m.playing.HttpHeaders
+    kbps = qualityOptions()[getQualityIndex()].kbps
+    if not locked and kbps > 0 then vc.MaxBandwidth = kbps
+    m.lockedVariant = locked
+    m.variantPending = false
+    m.stallTimer.duration = 20
+    m.video.content = vc
+    m.video.control = "play"
+    m.stallTimer.control = "stop"
+    m.stallTimer.control = "start"
+end sub
+
+' Recovery when a stream errors or stalls: a locked rendition falls back to the channel's own
+' adaptive URL; otherwise the stream is restarted once before telling the user.
+function recoverPlayback() as Boolean
+    if m.playing = invalid then return false
+    if m.lockedVariant = true and not m.fallbackTried
+        m.fallbackTried = true
+        startVideo(m.playing.url, false)
+        return true
+    end if
+    if not m.restartTried
+        m.restartTried = true
+        startVideo(m.playing.url, false)
+        return true
+    end if
+    return false
+end function
+
+sub onStallTimer()
+    if m.variantPending = true
+        startVideo(m.playing.url, false)
+        return
+    end if
+    state = m.video.state
+    if state = "playing" or state = "paused" or m.playing = invalid then return
+    if recoverPlayback()
+        m.nowPlaying.text = "Reconnecting  " + m.playing.title + " ..."
+    else
+        m.video.control = "stop"
+        m.nowPlaying.text = m.playing.title + " is not responding. Pick another channel."
+        showPanel()
+    end if
 end sub
 
 ' Moves up/down within the current channel list while in full screen.
@@ -759,13 +863,26 @@ sub onVideoState()
     state = m.video.state
     if m.playing = invalid then return
     if state = "playing"
+        m.stallTimer.control = "stop"
         if m.toastActive <> true
             m.nowPlaying.text = "Now playing:  " + m.playing.title
             if getSubtitleIndex() = 1 and channelHasSubtitles() then m.nowPlaying.text = m.nowPlaying.text + "   [CC]"
         end if
     else if state = "buffering"
         m.nowPlaying.text = "Loading  " + m.playing.title + " ..."
-    else if state = "error"
+    else if state = "error" or state = "finished"
+        ' Live channels should never "finish"; for them both cases mean the stream dropped.
+        ' A file (My Files) that finishes has simply ended.
+        if state = "finished" and m.playing.streamFormat <> "hls"
+            m.stallTimer.control = "stop"
+            showPanel()
+            return
+        end if
+        if recoverPlayback()
+            m.nowPlaying.text = "Reconnecting  " + m.playing.title + " ..."
+            return
+        end if
+        m.stallTimer.control = "stop"
         m.nowPlaying.text = m.playing.title + " is unavailable right now. Pick another channel."
         showPanel()
     end if

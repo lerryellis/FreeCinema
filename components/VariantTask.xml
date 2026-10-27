@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Picks one fixed rendition from an HLS master playlist so playback stays at the chosen quality. -->
+<component name="VariantTask" extends="Task">
+    <interface>
+        <field id="url" type="string"/>
+        <field id="headers" type="array"/>
+        <field id="maxKbps" type="integer"/>
+        <field id="maxHeight" type="integer"/>
+        <field id="token" type="integer"/>
+        <!-- { token, url, locked } - locked=false means play the original URL with a bandwidth cap. -->
+        <field id="result" type="assocarray"/>
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/VariantTask.brs"/>
+</component>
