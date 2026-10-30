@@ -8,8 +8,8 @@
     <script type="text/brightscript" uri="pkg:/components/ChannelRow.brs"/>
     <children>
         <Rectangle id="base" width="356" height="84" color="0xFFFFFF0A"/>
-        <Rectangle id="highlight" width="356" height="84" color="0x2E3140FF" opacity="0"/>
-        <Rectangle id="accent" width="5" height="84" color="0xF5C518FF" opacity="0"/>
+        <Rectangle id="highlight" width="356" height="84" color="0xFFFFFF26" opacity="0"/>
+        <Rectangle id="accent" width="5" height="84" color="0xFFFFFFFF" opacity="0"/>
         <Poster
             id="logo"
             translation="[14,9]"
@@ -28,7 +28,7 @@
             vertAlign="center"
             wrap="true"
             maxLines="2"
-            color="0xC8CAD4FF"
+            color="0xFFFFFFB3"
             font="font:SmallestSystemFont"/>
     </children>
 </component>

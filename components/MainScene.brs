@@ -206,10 +206,16 @@ function getFilesUrl() as String
     return DefaultFilesUrl()
 end function
 
+function getDavUrl() as String
+    sec = CreateObject("roRegistrySection", "FreeCinema")
+    if sec.Exists("davUrl") then return sec.Read("davUrl")
+    return ""
+end function
+
 sub loadPlaylist()
     url = getPlaylistUrl()
-    if url = "" and getFilesUrl() = ""
-        showStatus("No playlist URL set yet." + chr(10) + "Press * on your remote and choose ""Set playlist URL"".")
+    if url = "" and getFilesUrl() = "" and getDavUrl() = ""
+        showStatus("No source URL set yet." + chr(10) + "Press * on your remote to set a playlist, files website, or NAS WebDAV URL.")
         return
     end if
 
@@ -226,6 +232,7 @@ sub loadPlaylist()
     m.task.url = url
     m.task.country = getCountry()
     m.task.filesUrl = getFilesUrl()
+    m.task.davUrl = getDavUrl()
     m.task.control = "run"
 end sub
 
@@ -1017,6 +1024,7 @@ sub showMenu()
     menuRow(root, "search", "Search channels", "", false)
     menuRow(root, "url", "Set playlist URL", "", false)
     menuRow(root, "files", "Set My Files website", "", false)
+    menuRow(root, "nas", "Set NAS / WebDAV URL", "", false)
     menuRow(root, "reload", "Reload playlist", "", false)
 
     m.optionsMenu.content = root
@@ -1081,6 +1089,8 @@ sub onMenuSelected()
         showKeyboard("Playlist URL (M3U)", getPlaylistUrl(), "url")
     else if action = "files"
         showKeyboard("My Files website URL", getFilesUrl(), "files")
+    else if action = "nas"
+        showKeyboard("NAS WebDAV URL  e.g. http://user:pass@192.168.1.20:5005/videos", getDavUrl(), "nas")
     else if action = "reload"
         loadPlaylist()
     end if
@@ -1111,6 +1121,11 @@ sub onKeyboardButton()
     else if m.keyboardPurpose = "files"
         sec = CreateObject("roRegistrySection", "FreeCinema")
         sec.Write("filesUrl", text.Trim())
+        sec.Flush()
+        loadPlaylist()
+    else if m.keyboardPurpose = "nas"
+        sec = CreateObject("roRegistrySection", "FreeCinema")
+        sec.Write("davUrl", text.Trim())
         sec.Flush()
         loadPlaylist()
     end if

@@ -6,6 +6,7 @@ sub run()
     ' Personal files first; they appear at the top and skip the country filter.
     myRows = []
     if m.top.filesUrl <> "" then myRows = LoadMyFiles(m.top.filesUrl)
+    if m.top.davUrl <> "" then myRows.Append(LoadWebDavFiles(m.top.davUrl))
 
     channels = []
     url = m.top.url
@@ -15,11 +16,11 @@ sub run()
     end if
 
     if channels.Count() = 0 and myRows.Count() = 0
-        if url <> "" and m.top.filesUrl = ""
+        if url <> "" and m.top.filesUrl = "" and m.top.davUrl = ""
             m.top.error = "Could not load any channels from:" + chr(10) + url
             if m.top.country <> "" then m.top.error = m.top.error + chr(10) + "Try * > Show all countries."
         else
-            m.top.error = "Nothing could be loaded from the playlist or My Files URL."
+            m.top.error = "Nothing could be loaded from the playlist, My Files website, or NAS WebDAV URL. Check the address and make sure the NAS allows WebDAV access."
         end if
         return
     end if

@@ -5,7 +5,7 @@
     </interface>
     <script type="text/brightscript" uri="pkg:/components/ChannelItem.brs"/>
     <children>
-        <Rectangle id="card" width="300" height="230" color="0x1C1E26FF"/>
+        <Rectangle id="card" width="300" height="230" color="0xFFFFFF0D"/>
         <Poster
             id="logo"
             translation="[20,15]"

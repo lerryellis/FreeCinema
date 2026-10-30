@@ -4,6 +4,7 @@
         <field id="url" type="string"/>
         <field id="country" type="string"/>
         <field id="filesUrl" type="string"/>
+        <field id="davUrl" type="string"/>
         <field id="channels" type="array"/>
         <field id="rows" type="node"/>
         <field id="error" type="string"/>

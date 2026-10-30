@@ -16,7 +16,7 @@
         <Video id="video" width="1920" height="1080" enableUI="false"/>
 
         <Group id="nowPlayingGroup" translation="[700,960]" opacity="0">
-            <Rectangle width="1160" height="80" color="0x0E0F14B0"/>
+            <Rectangle width="1160" height="80" color="0x0A0A0AB3"/>
             <Label
                 id="nowPlaying"
                 translation="[30,0]"
@@ -29,13 +29,13 @@
         </Group>
 
         <Group id="panel">
-            <Rectangle id="panelBg" width="640" height="1080" color="0x0E0F14D0"/>
-            <Rectangle translation="[640,0]" width="2" height="1080" color="0xF5C51860"/>
+            <Rectangle id="panelBg" width="640" height="1080" color="0x0A0A0AE6"/>
+            <Rectangle translation="[640,0]" width="2" height="1080" color="0xFFFFFF14"/>
             <Label
                 id="header"
                 translation="[30,36]"
                 text="Ellis TV"
-                color="0xF5C518FF"
+                color="0xFFFFFFFF"
                 font="font:LargeBoldSystemFont"/>
             <Label
                 id="hint"
@@ -44,7 +44,7 @@
                 height="70"
                 wrap="true"
                 maxLines="2"
-                color="0xA0A3B1FF"
+                color="0xFFFFFF99"
                 font="font:SmallestSystemFont"/>
             <MarkupList
                 id="categoryList"
@@ -55,7 +55,7 @@
                 numRows="14"
                 drawFocusFeedback="false"
                 vertFocusAnimationStyle="floatingFocus"/>
-            <Rectangle translation="[262,170]" width="1" height="860" color="0xFFFFFF30"/>
+            <Rectangle translation="[262,170]" width="1" height="860" color="0xFFFFFF14"/>
             <MarkupList
                 id="channelList"
                 translation="[272,170]"

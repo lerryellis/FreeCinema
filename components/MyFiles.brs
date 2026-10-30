@@ -22,6 +22,55 @@ function LoadMyFiles(url as String) as Object
         files = CrawlListing(url, text, "", 0, {})
     end if
 
+    return GroupFileRows(files, "My Files")
+end function
+
+' Browse a NAS over WebDAV. Roku's player cannot mount SMB shares directly, but
+' WebDAV exposes the same NAS files over HTTP so the Video node can stream them.
+' A NAS login can be given in the URL (http://user:pass@nas:5005/video); it is moved into a
+' Basic Authorization header that is sent both for folder listings and by the video player.
+function LoadWebDavFiles(url as String) as Object
+    target = SplitCredentials(url.Trim())
+    headers = []
+    if target.auth <> "" then headers.Push("Authorization:Basic " + target.auth)
+    files = CrawlWebDav(target.url, "", 0, {}, headers)
+    return GroupFileRows(files, "NAS")
+end function
+
+' Returns { url (without user:pass@), auth (base64 "user:pass" or "") }.
+function SplitCredentials(url as String) as Object
+    result = { url: url, auth: "" }
+    schemeEnd = Instr(1, url, "://")
+    if schemeEnd = 0 then return result
+    hostStart = schemeEnd + 3
+    pathStart = Instr(hostStart, url, "/")
+    if pathStart = 0 then pathStart = Len(url) + 1
+    authority = Mid(url, hostStart, pathStart - hostStart)
+    ' The last "@" separates the login from the host, so passwords may contain "@".
+    at = 0
+    for i = Len(authority) to 1 step -1
+        if Mid(authority, i, 1) = "@"
+            at = i
+            exit for
+        end if
+    end for
+    if at = 0 then return result
+    unescaper = CreateObject("roUrlTransfer")
+    login = Left(authority, at - 1)
+    colon = Instr(1, login, ":")
+    if colon > 0
+        login = unescaper.Unescape(Left(login, colon - 1)) + ":" + unescaper.Unescape(Mid(login, colon + 1))
+    else
+        login = unescaper.Unescape(login) + ":"
+    end if
+    bytes = CreateObject("roByteArray")
+    bytes.FromAsciiString(login)
+    result.auth = bytes.ToBase64String()
+    result.url = Left(url, hostStart - 1) + Mid(authority, at + 1) + Mid(url, pathStart)
+    return result
+end function
+
+function GroupFileRows(files as Object, prefix as String) as Object
     groups = {}
     order = []
     for each f in files
@@ -31,16 +80,150 @@ function LoadMyFiles(url as String) as Object
             groups[g] = []
             order.Push(g)
         end if
-        f.cats = ["My Files - " + g]
+        f.cats = [prefix + " - " + g]
         groups[g].Push(f)
     end for
 
     rows = []
     for each g in order
         groups[g].SortBy("name", "i")
-        rows.Push({ title: "My Files - " + g, items: groups[g] })
+        rows.Push({ title: prefix + " - " + g, items: groups[g] })
     end for
     return rows
+end function
+
+' Lists each WebDAV directory and follows subfolders up to two levels. The
+' original HTTP URLs remain attached to each item so Roku can seek and stream.
+function CrawlWebDav(url as String, group as String, depth as Integer, visited as Object, headers as Object) as Object
+    directory = url.Trim()
+    if directory = "" then return []
+    if Right(directory, 1) <> "/" then directory = directory + "/"
+    if visited[directory] = true then return []
+    visited[directory] = true
+
+    xmlText = FetchWebDavListing(directory, headers)
+    if xmlText = invalid then return []
+    root = CreateObject("roXMLElement")
+    if not root.Parse(xmlText) then return []
+
+    files = []
+    responses = FindDavElements(root, "response")
+    for each response in responses
+        href = FindDavText(response, "href")
+        if href = invalid or href = "" then continue for
+        full = DavHrefToUrl(directory, href)
+        if full = invalid or SameDavPath(directory, full) then continue for
+
+        isCollection = HasDavElement(response, "collection")
+        if isCollection
+            if depth < 2 and Left(full, Len(directory)) = directory
+                folder = NameFromUrl(Left(full, Len(full) - 1))
+                childGroup = folder
+                if group <> "" then childGroup = group + " / " + folder
+                files.Append(CrawlWebDav(full, childGroup, depth + 1, visited, headers))
+            end if
+        else if IsVideoPath(full)
+            files.Push({ name: NameFromUrl(full), group: group, logo: "", tvgId: "", url: full, format: StreamFormatFor(full), headers: headers })
+        end if
+    end for
+    return files
+end function
+
+function FetchWebDavListing(url as String, headers as Object) as Dynamic
+    xfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    xfer.SetMessagePort(port)
+    xfer.SetUrl(url)
+    xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    xfer.InitClientCertificates()
+    xfer.SetRequest("PROPFIND")
+    xfer.AddHeader("Depth", "1")
+    xfer.AddHeader("Content-Type", "application/xml; charset=utf-8")
+    xfer.AddHeader("User-Agent", "EllisTV/1.0 (Roku)")
+    for each h in headers
+        colon = Instr(1, h, ":")
+        if colon > 1 then xfer.AddHeader(Left(h, colon - 1), Mid(h, colon + 1))
+    end for
+    body = "<?xml version=""1.0"" encoding=""utf-8""?><d:propfind xmlns:d=""DAV:""><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>"
+    if not xfer.AsyncPostFromString(body) then return invalid
+    msg = wait(12000, port)
+    if type(msg) = "roUrlEvent" and (msg.GetResponseCode() = 207 or msg.GetResponseCode() = 200)
+        return msg.GetString()
+    end if
+    xfer.AsyncCancel()
+    return invalid
+end function
+
+function FindDavElements(element as Object, tagName as String) as Object
+    found = []
+    children = element.GetChildElements()
+    if children = invalid then return found
+    for each child in children
+        if DavLocalName(child.GetName()) = LCase(tagName) then found.Push(child)
+        found.Append(FindDavElements(child, tagName))
+    end for
+    return found
+end function
+
+function FindDavText(element as Object, tagName as String) as Dynamic
+    if DavLocalName(element.GetName()) = LCase(tagName) then return element.GetText()
+    children = element.GetChildElements()
+    if children = invalid then return invalid
+    for each child in children
+        value = FindDavText(child, tagName)
+        if value <> invalid then return value
+    end for
+    return invalid
+end function
+
+function HasDavElement(element as Object, tagName as String) as Boolean
+    if DavLocalName(element.GetName()) = LCase(tagName) then return true
+    children = element.GetChildElements()
+    if children = invalid then return false
+    for each child in children
+        if HasDavElement(child, tagName) then return true
+    end for
+    return false
+end function
+
+function DavLocalName(name as String) as String
+    parts = name.Split(":")
+    return LCase(parts[parts.Count() - 1])
+end function
+
+function DavHrefToUrl(baseUrl as String, href as String) as Dynamic
+    value = href.Trim()
+    if Left(LCase(value), 7) = "http://" or Left(LCase(value), 8) = "https://" then return value
+    schemeEnd = Instr(1, baseUrl, "://")
+    hostEnd = Instr(schemeEnd + 3, baseUrl, "/")
+    if hostEnd = 0 then return invalid
+    origin = Left(baseUrl, hostEnd - 1)
+    if Left(value, 1) = "/" then return origin + value
+    return ResolveUrl(baseUrl, value)
+end function
+
+function SameDavPath(a as String, b as String) as Boolean
+    ' Names like "left"/"right" would shadow Left()/Right() (BrightScript is case-insensitive).
+    pathA = LCase(a)
+    pathB = LCase(b)
+    while Right(pathA, 1) = "/" and Len(pathA) > 1
+        pathA = Left(pathA, Len(pathA) - 1)
+    end while
+    while Right(pathB, 1) = "/" and Len(pathB) > 1
+        pathB = Left(pathB, Len(pathB) - 1)
+    end while
+    return pathA = pathB
+end function
+
+function IsVideoPath(url as String) as Boolean
+    path = LCase(url.Split("?")[0])
+    dot = path.Split(".")
+    if dot.Count() < 2 then return false
+    ext = dot[dot.Count() - 1]
+    for each supported in VideoExtensions()
+        if ext = supported then return true
+    end for
+    return false
 end function
 
 function ParseFileJson(text as String, baseUrl as String) as Object

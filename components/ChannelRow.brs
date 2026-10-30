@@ -18,5 +18,5 @@ sub updateFocus()
     if not m.top.listHasFocus then p = p * 0.35
     m.highlight.opacity = p
     m.accent.opacity = p
-    if p > 0.5 then m.title.color = "0xFFFFFFFF" else m.title.color = "0xC8CAD4FF"
+    if p > 0.5 then m.title.color = "0xFFFFFFFF" else m.title.color = "0xFFFFFFB3"
 end sub
